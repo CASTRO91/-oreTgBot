@@ -109,10 +109,10 @@ class BotApplication:
         Возвращаемое значение: None.
         """
         throttling = ThrottlingMiddleware()
-        self.dp.message.middleware(throttling)
-        self.dp.callback_query.middleware(throttling)
-        self.dp.message.middleware(AuthAndDBSessionMiddleware())
-        self.dp.callback_query.middleware(AuthAndDBSessionMiddleware())
+        self.dp.message.outer_middleware(throttling)
+        self.dp.callback_query.outer_middleware(throttling)
+        self.dp.message.outer_middleware(AuthAndDBSessionMiddleware())
+        self.dp.callback_query.outer_middleware(AuthAndDBSessionMiddleware())
 
     async def _setup_routes(self) -> None:
         """
