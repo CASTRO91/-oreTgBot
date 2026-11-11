@@ -27,8 +27,19 @@ class I18nService:
         "de": "🇩🇪 Deutsch"
     }
 
-    # Быстрый In-Memory кэш в оперативной памяти (ключ: cache_key -> текст)
+    # Быстрый In-Memory кэш в оперативной памяти с контролем максимального размера
     _memory_cache: Dict[str, str] = {}
+    _MAX_CACHE_SIZE: int = 5000
+
+    @classmethod
+    def _cache_set(cls, key: str, value: str) -> None:
+        """Сохранение в RAM-кэш с ротацией для защиты от утечки памяти."""
+        if len(cls._memory_cache) >= cls._MAX_CACHE_SIZE:
+            # Очищаем 20% старых записей
+            keys_to_purge = list(cls._memory_cache.keys())[:int(cls._MAX_CACHE_SIZE * 0.2)]
+            for k in keys_to_purge:
+                cls._memory_cache.pop(k, None)
+        cls._memory_cache[key] = value
 
     @classmethod
     async def tr(cls, text: str, target_lang: str = "ru", **kwargs: Any) -> str:
@@ -65,7 +76,7 @@ class I18nService:
             cached_record = (await session.execute(stmt)).scalar_one_or_none()
 
             if cached_record:
-                cls._memory_cache[cache_key] = cached_record.translated_text
+                cls._cache_set(cache_key, cached_record.translated_text)
                 return cls._apply_formatting(cached_record.translated_text, kwargs)
 
             # 5. УРОВЕНЬ 3: Переводим через сеть и сохраняем в БД
@@ -76,7 +87,7 @@ class I18nService:
             )
 
             # Сохраняем в память
-            cls._memory_cache[cache_key] = translated_text
+            cls._cache_set(cache_key, translated_text)
 
             # Сохраняем в БД для вечного использования
             try:

@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime
 from sqlalchemy import Integer, String, Text, Boolean, DateTime, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from database.models.base import Base
+from database.models.base import Base, utc_now
 
 
 class LocalizationCache(Base):
@@ -28,8 +28,8 @@ class LocalizationCache(Base):
     # Флаг ручной правки через БД: если True, автопереводчик никогда не перезапишет этот текст
     is_manual: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now,
                                                  nullable=False)
 
     __table_args__ = (

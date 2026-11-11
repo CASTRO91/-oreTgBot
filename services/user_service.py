@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
-from sqlalchemy import select, or_, update
+from sqlalchemy import select, or_, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.user import User, UserRole
@@ -151,7 +151,7 @@ class UserService:
         stmt = (
             update(User)
             .where(User.telegram_id == telegram_id)
-            .values(**fields, updated_at=datetime.utcnow())
+            .values(**fields, updated_at=datetime.now(timezone.utc))
             .returning(User)
         )
         result = await session.execute(stmt)
@@ -195,23 +195,19 @@ class UserService:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-        # Поиск по текстовым полям (с учетом разных вариантов регистра для SQLite)
-        variants = {
-            f"%{clean_query}%",
-            f"%{clean_query.lower()}%",
-            f"%{clean_query.capitalize()}%",
-            f"%{clean_query.upper()}%"
-        }
-
-        conditions = []
-        for v in variants:
-            conditions.extend([
-                User.username.like(v),
-                User.first_name.like(v),
-                User.last_name.like(v)
-            ])
-
-        stmt = select(User).where(or_(*conditions)).limit(limit)
+        # Оптимизированный регистронезависимый поиск по текстовым полям
+        search_pattern = f"%{clean_query.lower()}%"
+        stmt = (
+            select(User)
+            .where(
+                or_(
+                    func.lower(User.username).like(search_pattern),
+                    func.lower(User.first_name).like(search_pattern),
+                    func.lower(User.last_name).like(search_pattern)
+                )
+            )
+            .limit(limit)
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
@@ -235,7 +231,7 @@ class UserService:
         stmt = (
             update(User)
             .where(User.telegram_id == target_id)
-            .values(is_banned=is_banned, updated_at=datetime.utcnow())
+            .values(is_banned=is_banned, updated_at=datetime.now(timezone.utc))
         )
         await session.execute(stmt)
         await session.commit()

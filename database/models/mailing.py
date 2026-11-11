@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import Integer, BigInteger, String, Text, DateTime, Enum, Boolean, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from database.models.base import Base
+from database.models.base import Base, utc_now
 
 
 class ScheduleType(str, enum.Enum):
@@ -52,7 +52,7 @@ class ScheduledMailing(Base):
     next_run_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (

@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import BigInteger, String, Integer, DateTime, Enum, JSON, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from database.models.base import Base
+from database.models.base import Base, utc_now
 from core.config import settings
 
 
@@ -27,7 +27,7 @@ class QueueTask(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=settings.DEFAULT_MAX_ATTEMPTS, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import BigInteger, String, Boolean, DateTime, Enum, Text,Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from database.models.base import Base
+from database.models.base import Base, utc_now
 from core.config import settings
 
 
@@ -31,9 +31,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.USER, nullable=False)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
 
     # Связи

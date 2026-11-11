@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.user import User, UserRole
 from database.models.mailing import ScheduledMailing, ScheduleType, TargetType, MediaType
+from database.models.base import utc_now
 from database.models.group import Group
 from services.scheduler_service import SchedulerService
 from services.group_service import GroupService
@@ -230,7 +231,7 @@ async def process_delay_choice(cb: types.CallbackQuery, state: FSMContext, sessi
         return
 
     minutes = int(val)
-    run_at = datetime.utcnow() + timedelta(minutes=minutes)
+    run_at = utc_now() + timedelta(minutes=minutes)
     await finalize_mailing_creation(cb.message, state, session, ScheduleType.ONCE, run_at=run_at, lang=lang)
     await cb.answer()
 
@@ -241,7 +242,7 @@ async def process_custom_delay(message: types.Message, state: FSMContext, sessio
     if not message.text or not message.text.isdigit():
         await message.answer(await I18nService.tr("⚠️ Введите число минут цифрами:", lang))
         return
-    run_at = datetime.utcnow() + timedelta(minutes=int(message.text))
+    run_at = utc_now() + timedelta(minutes=int(message.text))
     await finalize_mailing_creation(message, state, session, ScheduleType.ONCE, run_at=run_at, lang=lang)
 
 
@@ -261,7 +262,7 @@ async def process_exact_datetime(message: types.Message, state: FSMContext, sess
         # Переводим в эталонный UTC для базы данных
         utc_dt = localized_dt.astimezone(pytz.UTC).replace(tzinfo=None)
 
-        if utc_dt <= datetime.utcnow():
+        if utc_dt <= utc_now():
             await message.answer(await I18nService.tr("⚠️ Указанное время уже прошло! Введите будущую дату:", lang))
             return
 

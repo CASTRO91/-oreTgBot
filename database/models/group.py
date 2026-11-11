@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Integer, BigInteger, String, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from database.models.base import Base
+from database.models.base import Base, utc_now
 
 class Group(Base):
     """
@@ -13,7 +13,7 @@ class Group(Base):
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     members = relationship("UserGroupMembership", back_populates="group", cascade="all, delete-orphan")
 
@@ -28,7 +28,7 @@ class UserGroupMembership(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), nullable=False)
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     added_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     user = relationship("User", back_populates="group_memberships")
     group = relationship("Group", back_populates="members")

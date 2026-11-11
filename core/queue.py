@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models.queue import QueueTask, TaskStatus
+from database.models.base import utc_now
 from core.config import settings
 
 
@@ -93,7 +94,7 @@ class QueueManager:
             .where(QueueTask.id == task_id)
             .values(
                 status=TaskStatus.COMPLETED,
-                processed_at=datetime.utcnow()
+                processed_at=utc_now()
             )
         )
         await session.execute(stmt)
@@ -110,7 +111,7 @@ class QueueManager:
             .values(
                 status=new_status,
                 error_message=error,
-                processed_at=datetime.utcnow() if is_fatal else None
+                processed_at=utc_now() if is_fatal else None
             )
         )
         await session.execute(stmt)

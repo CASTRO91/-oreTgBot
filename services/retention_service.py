@@ -5,6 +5,7 @@ from sqlalchemy import delete
 from database.session import AsyncSessionLocal
 from database.models.queue import QueueTask, TaskStatus
 from database.models.audit import ActionLog
+from database.models.base import utc_now
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ class RetentionService:
     @staticmethod
     async def cleanup_old_data():
         logger.info("🧹 Запуск плановой очистки устаревших данных...")
-        now = datetime.utcnow()
+        now = utc_now()
         task_cutoff = now - timedelta(days=settings.RETENTION_DAYS_TASKS)
         log_cutoff = now - timedelta(days=settings.RETENTION_DAYS_LOGS)
 

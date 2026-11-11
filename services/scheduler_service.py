@@ -11,6 +11,7 @@ from database.models.mailing import ScheduledMailing, ScheduleType
 from core.queue import QueueManager
 from core.config import settings
 from database.models.mailing import ScheduledMailing, TargetType
+from database.models.base import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class SchedulerService:
         Возвращаемое значение:
             datetime: Следующее время запуска в UTC.
         """
-        base = base_time or datetime.utcnow()
+        base = base_time or utc_now()
         iterator = croniter(cron_rule, base)
         return iterator.get_next(datetime)
 
@@ -41,7 +42,7 @@ class SchedulerService:
         Входные параметры: Нет.
         Возвращаемое значение: None.
         """
-        now = datetime.utcnow()
+        now = utc_now()
         async with AsyncSessionLocal() as session:
             # Ищем активные рассылки, время которых наступило
             stmt = (
