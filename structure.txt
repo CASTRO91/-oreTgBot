@@ -1,0 +1,55 @@
+СoreTgBot/
+│
+├── alembic/                         # Слой версионирования и миграций базы данных
+│   ├── versions/                    # Папка, куда Alembic сохраняет файлы миграций
+│   ├── env.py                       # Асинхронный мост между Alembic и SQLAlchemy
+│   └── script.py.mako               # Шаблон генерации новых миграций
+│
+├── core/                            # СЕРДЦЕ СИСТЕМЫ (SDK & Execution Engine)
+│   ├── __init__.py
+│   ├── app.py                       # BotApplication — главный оркестратор/SDK ядра
+│   ├── config.py                    # Настройки Pydantic (Worker Pool, Smart Idle, DB)
+│   ├── queue.py                     # Менеджер очереди (атомарный Lock, Event Wake-Up)
+│   └── worker.py                    # DynamicWorkerPool (Smart Sleep, Auto-scaling, Recycling)
+│
+├── database/                        # Слой хранения данных (Storage Layer)
+│   ├── __init__.py
+│   ├── session.py                   # Async Engine, WAL-режим, SessionMaker
+│   └── models/                      # SQLAlchemy 2.0 Модели с B-Tree индексами
+│       ├── __init__.py              # Точка экспорта всех моделей наружу
+│       ├── base.py                  # DeclarativeBase
+│       ├── user.py                  # Таблица 'users' (профили, роли, бан)
+│       ├── permission.py            # Таблицы 'permissions' и 'user_permissions' (ACL)
+│       ├── queue.py                 # Таблица 'task_queue' (составной индекс status+id)
+│       └── audit.py                 # Таблица 'action_logs' (составной индекс user+date)
+│
+├── handlers/                        # Системные роутеры ядра (Telegram Interface)
+│   ├── __init__.py                  # register_all_handlers() — сборка роутеров
+│   ├── admin.py                     # Админ-панель (/admin), рассылки, умный поиск
+│   ├── registration.py              # FSM-регистрация и изменение профиля
+│   └── user.py                      # /start, /profile, динамический /help
+│
+├── middlewares/                     # Слой безопасности и перехватчиков (Middlewares)
+│   ├── __init__.py
+│   ├── acl.py                       # PermissionFilter и SuperAdminFilter
+│   ├── auth.py                      # Инъекция сессии БД, проверка бана и регистрации
+│   └── throttling.py                # In-memory Rate Limiter (защита от DDOS/спама)
+│
+├── services/                        # Бизнес-логика ядра (Business Logic)
+│   ├── __init__.py
+│   ├── access_service.py            # Управление ролями, проверка прав (RBAC/ACL)
+│   ├── alert_service.py             # Системные алерты Главному Админу при сбоях
+│   ├── retention_service.py         # Фоновый уборщик мусора (очистка старых логов/задач)
+│   └── user_service.py              # Регистрация, обновление данных, поиск по базе
+│
+├── utils/                           # Вспомогательные утилиты
+│   ├── __init__.py
+│   ├── keyboards.py                 # Фабрики Inline и Reply клавиатур
+│   └── states.py                    # FSM-состояния (регистрация, правка, рассылки)
+│
+├── .env                             # Локальные переменные окружения (секреты)
+├── .env.example                     # Шаблон конфига для команды и продакшена
+├── .gitignore                       # Игнор venv, .env, *.db, *.db-wal, __pycache__
+├── alembic.ini                      # Конфигурация системы миграций Alembic
+├── main.py                          # Точка сборки и пример подключения плагинов к ядру
+└── requirements.txt                 # Зафиксированные версии библиотек

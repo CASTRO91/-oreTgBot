@@ -1,0 +1,249 @@
+from datetime import datetime
+from typing import List, Optional, Any, Dict
+from sqlalchemy import select, or_, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.models.user import User, UserRole
+from database.models.audit import ActionLog
+from core.config import settings
+
+
+class UserService:
+    """
+    Назначение:
+        Сервисный слой для управления пользователями, профилями,
+        блокировками и аудитом действий.
+    """
+
+    @staticmethod
+    async def log_action(
+            session: AsyncSession,
+            user_id: int,
+            action: str,
+            details: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Назначение: Запись действия пользователя или администратора в таблицу аудита (ActionLog).
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            user_id (int): Telegram ID инициатора действия.
+            action (str): Текстовый код действия (например, 'USER_REGISTERED', 'USER_BANNED').
+            details (dict, optional): Словарь с дополнительными метаданными.
+        Возвращаемое значение: None.
+        """
+        log_entry = ActionLog(user_id=user_id, action=action, details=details)
+        session.add(log_entry)
+        await session.commit()
+
+    @staticmethod
+    async def get_by_id(
+            session: AsyncSession,
+            telegram_id: int
+    ) -> Optional[User]:
+        """
+        Назначение: Получение объекта пользователя по его первичному ключу (Telegram ID).
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            telegram_id (int): Telegram ID пользователя.
+        Возвращаемое значение:
+            Optional[User]: Объект модели User или None, если пользователь не найден.
+        """
+        stmt = select(User).where(User.telegram_id == telegram_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def register_user(
+            cls,
+            session: AsyncSession,
+            telegram_id: int,
+            username: Optional[str],
+            first_name: str,
+            last_name: str,
+            address: str,
+            phone: Optional[str] = None,
+            language_code: str = settings.DEFAULT_LANGUAGE,
+            timezone: str = settings.DEFAULT_TIMEZONE,
+            latitude: Optional[float] = None,
+            longitude: Optional[float] = None
+    ) -> User:
+        """
+        Назначение: Регистрация нового пользователя с геоданными, языком и часовым поясом.
+        Входные параметры:
+            session (AsyncSession): Сессия SQLAlchemy.
+            telegram_id (int): Telegram ID.
+            username (str, optional): Юзернейм без '@'.
+            first_name (str): Имя.
+            last_name (str): Фамилия.
+            address (str): Адрес.
+            phone (str, optional): Номер телефона.
+            language_code (str): Язык.
+            timezone (str): IANA часовой пояс.
+            latitude (float, optional): Широта.
+            longitude (float, optional): Долгота.
+        Возвращаемое значение: User.
+        """
+        role = UserRole.SUPER_ADMIN if telegram_id == settings.ADMIN_ID else UserRole.USER
+
+        user = User(
+            telegram_id=telegram_id,
+            username=username.replace("@", "") if username else None,
+            first_name=first_name,
+            last_name=last_name,
+            address=address,
+            phone=phone,
+            language_code=language_code,
+            timezone=timezone,
+            latitude=latitude,
+            longitude=longitude,
+            role=role,
+            is_banned=False
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        await cls.log_action(
+            session=session,
+            user_id=telegram_id,
+            action="USER_REGISTERED",
+            details={"role": role.value, "timezone": timezone, "lang": language_code}
+        )
+        return user
+
+    @staticmethod
+    async def get_latest_users(
+            session: AsyncSession,
+            limit: int = 1
+    ) -> List[User]:
+        """
+        Назначение: Получение списка последних зарегистрированных пользователей.
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            limit (int): Количество пользователей для выборки (по умолчанию 1).
+        Возвращаемое значение:
+            List[User]: Список объектов User, отсортированных от новых к старым.
+        """
+        stmt = (
+            select(User)
+            .order_by(User.created_at.desc())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @classmethod
+    async def update_profile(
+            cls,
+            session: AsyncSession,
+            telegram_id: int,
+            **fields: Any
+    ) -> Optional[User]:
+        """
+        Назначение: Динамическое обновление переданных полей профиля пользователя.
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            telegram_id (int): Telegram ID пользователя для обновления.
+            **fields: Произвольные именованные аргументы, соответствующие колонкам таблицы User.
+        Возвращаемое значение:
+            Optional[User]: Обновленный объект User или None, если пользователь не найден.
+        """
+        stmt = (
+            update(User)
+            .where(User.telegram_id == telegram_id)
+            .values(**fields, updated_at=datetime.utcnow())
+            .returning(User)
+        )
+        result = await session.execute(stmt)
+        await session.commit()
+        updated_user = result.scalar_one_or_none()
+
+        if updated_user:
+            await cls.log_action(
+                session=session,
+                user_id=telegram_id,
+                action="PROFILE_UPDATED",
+                details={"updated_fields": list(fields.keys())}
+            )
+        return updated_user
+
+    @staticmethod
+    async def search_users(
+            session: AsyncSession,
+            query: str,
+            limit: int = 10
+    ) -> List[User]:
+        """
+        Назначение:
+            Умный поиск пользователей с фильтрацией пробелов и спецсимволов.
+            Поддерживает поиск по точному Telegram ID и регистронезависимый поиск по имени/фамилии/нику.
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            query (str): Поисковая строка от пользователя.
+            limit (int): Максимальное количество записей в ответе (по умолчанию 10).
+        Возвращаемое значение:
+            List[User]: Список найденных объектов пользователей.
+        """
+        clean_query = query.strip().lstrip("@").strip("[](){}<>\"'")
+
+        if not clean_query:
+            return []
+
+        # Поиск по числовому Telegram ID
+        if clean_query.isdigit():
+            stmt = select(User).where(User.telegram_id == int(clean_query))
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+        # Поиск по текстовым полям (с учетом разных вариантов регистра для SQLite)
+        variants = {
+            f"%{clean_query}%",
+            f"%{clean_query.lower()}%",
+            f"%{clean_query.capitalize()}%",
+            f"%{clean_query.upper()}%"
+        }
+
+        conditions = []
+        for v in variants:
+            conditions.extend([
+                User.username.like(v),
+                User.first_name.like(v),
+                User.last_name.like(v)
+            ])
+
+        stmt = select(User).where(or_(*conditions)).limit(limit)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @classmethod
+    async def set_ban_status(
+            cls,
+            session: AsyncSession,
+            admin_id: int,
+            target_id: int,
+            is_banned: bool
+    ) -> None:
+        """
+        Назначение: Установка статуса блокировки пользователя с записью в ActionLog.
+        Входные параметры:
+            session (AsyncSession): Асинхронная сессия SQLAlchemy.
+            admin_id (int): Telegram ID администратора, выполняющего операцию.
+            target_id (int): Telegram ID целевого пользователя.
+            is_banned (bool): True - заблокировать, False - снять блокировку.
+        Возвращаемое значение: None.
+        """
+        stmt = (
+            update(User)
+            .where(User.telegram_id == target_id)
+            .values(is_banned=is_banned, updated_at=datetime.utcnow())
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+        action = "USER_BANNED" if is_banned else "USER_UNBANNED"
+        await cls.log_action(
+            session=session,
+            user_id=admin_id,
+            action=action,
+            details={"target_id": target_id}
+        )
