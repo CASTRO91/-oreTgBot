@@ -1,5 +1,5 @@
 from database.models.base import Base
-from database.models.user import User, UserRole
+from database.models.user import User, UserRole, UserExtraDataHistory
 from database.models.permission import Permission, UserPermission
 from database.models.queue import QueueTask, TaskStatus
 from database.models.audit import ActionLog
@@ -12,6 +12,7 @@ __all__ = [
     "Base",
     "User",
     "UserRole",
+    "UserExtraDataHistory",
     "Permission",
     "UserPermission",
     "QueueTask",

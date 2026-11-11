@@ -137,9 +137,19 @@ class BotApplication:
         """
         logger.info("Инициализация инфраструктуры ядра...")
 
-        # 1. Автоматическая проверка БД
+        # 1. Автоматическая проверка БД и обновление схемы
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+            def migrate_schema(sync_conn):
+                from sqlalchemy import inspect, text
+                inspector = inspect(sync_conn)
+                if "users" in inspector.get_table_names():
+                    cols = [c["name"] for c in inspector.get_columns("users")]
+                    if "extra_data" not in cols:
+                        sync_conn.execute(text("ALTER TABLE users ADD COLUMN extra_data JSON DEFAULT '{}' NOT NULL"))
+
+            await conn.run_sync(migrate_schema)
 
         # 2. Настройка конвейера обработки
         await self._setup_middlewares()

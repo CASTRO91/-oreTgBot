@@ -1,6 +1,7 @@
 import aiohttp
 import logging
-from typing import Optional, Tuple
+import math
+from typing import Optional, Tuple, List, Any, Callable
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -136,3 +137,133 @@ class GeoService:
 
         # Фолбэк, если интернета нет или город совсем марсианский
         return text_address, settings.DEFAULT_TIMEZONE, None, None
+
+    # =========================================================================
+    # Изолированный математический расчет расстояний (Haversine formula)
+    # Не требует внешних API, работает мгновенно в памяти, идеален для
+    # плагинов недвижимости, магазинов, курьеров и точек выдачи.
+    # =========================================================================
+
+    @staticmethod
+    def calculate_distance(
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+        unit: str = "km"
+    ) -> float:
+        """
+        Назначение:
+            Изолированный высокоточный расчет расстояния между двумя точками на Земле
+            по формуле гаверсинусов (Haversine formula, средний радиус WGS-84 = 6371.0088 км).
+            Не делает сетевых запросов, не требует сторонних библиотек.
+
+        Пример использования в 2 строчки:
+            from services.geo_service import GeoService
+            dist = GeoService.calculate_distance(53.9006, 27.5590, 53.9200, 27.6000)
+
+        Параметры:
+            lat1, lon1: GPS широта и долгота первой точки (в градусах).
+            lat2, lon2: GPS широта и долгота второй точки (в градусах).
+            unit: Единица измерения ('km' - км, 'm' - метры, 'mi' - мили).
+
+        Возвращает:
+            Расстояние в указанных единицах (округление: км/мили - 3 знака, метры - 1 знак).
+        """
+        EARTH_RADIUS_KM = 6371.0088
+
+        d_lat = math.radians(lat2 - lat1)
+        d_lon = math.radians(lon2 - lon1)
+        r_lat1 = math.radians(lat1)
+        r_lat2 = math.radians(lat2)
+
+        a = math.sin(d_lat / 2.0) ** 2 + math.cos(r_lat1) * math.cos(r_lat2) * math.sin(d_lon / 2.0) ** 2
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+        distance_km = EARTH_RADIUS_KM * c
+
+        unit_clean = unit.strip().lower()
+        if unit_clean in ("m", "meter", "meters", "метр", "метры", "м"):
+            return round(distance_km * 1000.0, 1)
+        elif unit_clean in ("mi", "mile", "miles", "миля", "мили"):
+            return round(distance_km * 0.621371, 3)
+        return round(distance_km, 3)
+
+    @staticmethod
+    def is_within_radius(
+        origin_lat: float,
+        origin_lon: float,
+        target_lat: float,
+        target_lon: float,
+        radius: float,
+        unit: str = "km"
+    ) -> bool:
+        """
+        Назначение:
+            Проверка попадания объекта в заданный радиус от точки пользователя
+            (например: квартира в радиусе 5 км, зона доставки магазина 15 км).
+
+        Пример использования в 2 строчки:
+            from services.geo_service import GeoService
+            is_near = GeoService.is_within_radius(user_lat, user_lon, shop_lat, shop_lon, radius=5.0)
+        """
+        dist = GeoService.calculate_distance(origin_lat, origin_lon, target_lat, target_lon, unit=unit)
+        return dist <= radius
+
+    @staticmethod
+    def sort_by_distance(
+        origin_lat: float,
+        origin_lon: float,
+        items: List[Any],
+        lat_getter: Optional[Callable[[Any], Optional[float]]] = None,
+        lon_getter: Optional[Callable[[Any], Optional[float]]] = None,
+        unit: str = "km",
+        reverse: bool = False
+    ) -> List[Tuple[Any, float]]:
+        """
+        Назначение:
+            Сортировка коллекции объектов (квартир, магазинов, объявлений) по удаленности
+            от переданной гео-позиции.
+
+        Параметры:
+            origin_lat, origin_lon: Координаты точки отсчета (пользователя).
+            items: Список объектов (словари, модели SQLAlchemy, Pydantic, DTO).
+            lat_getter: Функция извлечения широты (по умолчанию ищет 'latitude' или 'lat').
+            lon_getter: Функция извлечения долготы (по умолчанию ищет 'longitude', 'lon' или 'lng').
+            unit: 'km' | 'm' | 'mi'.
+            reverse: False (ближайшие первыми), True (дальние первыми).
+
+        Возвращает:
+            Список кортежей [(item, distance), ...], отсортированный по расстоянию.
+        """
+        def _default_lat(obj: Any) -> Optional[float]:
+            if isinstance(obj, dict):
+                val = obj.get("latitude", obj.get("lat"))
+            else:
+                val = getattr(obj, "latitude", getattr(obj, "lat", None))
+            return float(val) if val is not None else None
+
+        def _default_lon(obj: Any) -> Optional[float]:
+            if isinstance(obj, dict):
+                val = obj.get("longitude", obj.get("lon", obj.get("lng")))
+            else:
+                val = getattr(obj, "longitude", getattr(obj, "lon", getattr(obj, "lng", None)))
+            return float(val) if val is not None else None
+
+        get_lat = lat_getter or _default_lat
+        get_lon = lon_getter or _default_lon
+
+        result = []
+        for item in items:
+            try:
+                lat = get_lat(item)
+                lon = get_lon(item)
+                if lat is None or lon is None:
+                    continue
+                d = GeoService.calculate_distance(origin_lat, origin_lon, lat, lon, unit=unit)
+                result.append((item, d))
+            except Exception as e:
+                logger.debug(f"Пропуск элемента {item} при сортировке по расстоянию: {e}")
+                continue
+
+        result.sort(key=lambda pair: pair[1], reverse=reverse)
+        return result
