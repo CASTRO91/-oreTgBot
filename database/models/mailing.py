@@ -21,6 +21,8 @@ class MediaType(str, enum.Enum):
     PHOTO = "PHOTO"  # Фотография с текстом
     VIDEO = "VIDEO"  # Видеозапись с текстом
     DOCUMENT = "DOCUMENT"  # Документ/файл с текстом
+    AUDIO = "AUDIO"  # Аудиозапись с текстом
+    VOICE = "VOICE"  # Голосовое сообщение с текстом
 
 
 class ScheduledMailing(Base):

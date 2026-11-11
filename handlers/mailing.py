@@ -149,7 +149,7 @@ async def process_target_group_id(cb: types.CallbackQuery, state: FSMContext, db
 
 # --- ПРИЕМ КОНТЕНТА (ТЕКСТ ИЛИ МЕДИА) ---
 
-@router.message(MailingBuilderStates.waiting_for_content, F.text | F.photo | F.video | F.document)
+@router.message(MailingBuilderStates.waiting_for_content, F.text | F.photo | F.video | F.document | F.audio | F.voice)
 async def process_mailing_content(message: types.Message, state: FSMContext, db_user: User) -> None:
     lang = db_user.language_code
     media_type = MediaType.NONE
@@ -167,6 +167,14 @@ async def process_mailing_content(message: types.Message, state: FSMContext, db_
     elif message.document:
         media_type = MediaType.DOCUMENT
         file_id = message.document.file_id
+        content_text = message.caption or ""
+    elif message.audio:
+        media_type = MediaType.AUDIO
+        file_id = message.audio.file_id
+        content_text = message.caption or ""
+    elif message.voice:
+        media_type = MediaType.VOICE
+        file_id = message.voice.file_id
         content_text = message.caption or ""
     else:
         content_text = message.text or ""

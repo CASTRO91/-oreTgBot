@@ -27,6 +27,7 @@ from utils.states import GroupManageStates
 
 
 from services.excel_service import ExcelService
+from services.media_relay_service import MediaRelayService
 
 router = Router(name="admin_router")
 router.message.filter(AdminRoleFilter())
@@ -172,7 +173,10 @@ async def cb_msg_user_get_id(message: types.Message, state: FSMContext):
         return
     await state.update_data(target_user_id=int(message.text))
     await state.set_state(AdminBroadcastStates.waiting_for_single_message)
-    await message.answer("Теперь отправьте <b>текст сообщения</b> для этого пользователя:")
+    await message.answer(
+        "Теперь отправьте <b>сообщение</b> (текст, фото, видео, аудио, голосовое или файл) для этого пользователя:",
+        parse_mode="HTML"
+    )
 
 
 @router.callback_query(F.data.startswith("manage_perms:"))
@@ -288,16 +292,23 @@ async def cb_msg_user_send(message: types.Message, state: FSMContext, bot: Bot):
     target_id = data["target_user_id"]
     await state.clear()
 
-    try:
-        await bot.send_message(
-            chat_id=target_id,
-            text=f"✉️ <b>Сообщение от администрации:</b>\n\n{message.text}",
+    success = await MediaRelayService.relay_message(
+        bot=bot,
+        message=message,
+        target_chat_id=target_id,
+        header_text="✉️ <b>Сообщение от администрации:</b>"
+    )
+    if success:
+        await message.answer(
+            f"✅ Сообщение успешно доставлено пользователю <code>{target_id}</code>!",
             parse_mode="HTML"
         )
-        await message.answer(f"✅ Сообщение успешно доставлено пользователю <code>{target_id}</code>!",
-                             parse_mode="HTML")
-    except Exception as e:
-        await message.answer(f"❌ Не удалось отправить сообщение: {e}")
+    else:
+        await message.answer(
+            f"❌ Не удалось отправить сообщение пользователю <code>{target_id}</code>. "
+            f"Возможно, бот заблокирован пользователем.",
+            parse_mode="HTML"
+        )
 
 
 # --- СЦЕНАРИЙ: РАССЫЛКА ВСЕМ ЧЕРЕЗ ОЧЕРЕДЬ ---
@@ -496,8 +507,8 @@ async def cb_admin_direct_msg(
     await state.set_state(AdminBroadcastStates.waiting_for_single_message)
 
     await cb.message.answer(
-        f"✍️ Введите текст сообщения для пользователя <code>{target_id}</code>:\n"
-        f"<i>(Сообщение будет отправлено от имени бота)</i>",
+        f"✍️ Отправьте сообщение для пользователя <code>{target_id}</code>\n"
+        f"<i>(Поддерживаются текст, фото, видео, аудио, голосовые и файлы)</i>:",
         parse_mode="HTML"
     )
     await cb.answer()

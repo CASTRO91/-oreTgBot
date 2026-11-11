@@ -82,6 +82,10 @@ class MailingExecutor:
             await bot.send_video(chat_id=user_id, video=file_id, caption=text, parse_mode="HTML")
         elif media_type == MediaType.DOCUMENT and file_id:
             await bot.send_document(chat_id=user_id, document=file_id, caption=text, parse_mode="HTML")
+        elif media_type == MediaType.AUDIO and file_id:
+            await bot.send_audio(chat_id=user_id, audio=file_id, caption=text, parse_mode="HTML")
+        elif media_type == MediaType.VOICE and file_id:
+            await bot.send_voice(chat_id=user_id, voice=file_id, caption=text, parse_mode="HTML")
         else:
             await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
 

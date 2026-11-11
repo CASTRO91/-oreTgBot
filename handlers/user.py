@@ -12,6 +12,7 @@ from utils.states import RegistrationStates
 from utils.keyboards import get_profile_edit_kb, get_language_selection_kb, get_timezone_selection_kb
 from services.i18n_service import I18nService
 from services.user_service import UserService
+from services.media_relay_service import MediaRelayService
 from utils.states import SupportStates
 from utils.keyboards import get_about_kb
 
@@ -242,10 +243,10 @@ async def cmd_support_start(event: types.Message | types.CallbackQuery, state: F
 async def process_support_message(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot,
                                   db_user: User) -> None:
     """
-    Назначение: Прием текста от пользователя и рассылка ВСЕМ администраторам бота.
+    Назначение: Прием любого медиа (текст, фото, видео, аудио, голосовые, кружочки, файлы)
+    от пользователя и безопасная доставка ВСЕМ администраторам бота с кнопкой ответа.
     """
     lang = db_user.language_code
-    user_text = message.text or message.caption or "<i>(Медиафайл)</i>"
     await state.clear()
 
     # 1. Достаем всех администраторов и супер-админа
@@ -261,8 +262,7 @@ async def process_support_message(message: types.Message, state: FSMContext, ses
         f"📩 <b>Новое обращение от пользователя!</b>\n\n"
         f"▫️ <b>От:</b> {html.escape(db_user.first_name)} {html.escape(db_user.last_name)} ({sender_uname})\n"
         f"▫️ <b>ID:</b> <code>{message.from_user.id}</code>\n"
-        f"▫️ <b>Язык:</b> <code>{db_user.language_code.upper()}</code>\n\n"
-        f"📝 <b>Сообщение:</b>\n{html.escape(user_text)}"
+        f"▫️ <b>Язык:</b> <code>{db_user.language_code.upper()}</code>"
     )
 
     # Кнопка для админа: ответить в 1 клик
@@ -271,15 +271,20 @@ async def process_support_message(message: types.Message, state: FSMContext, ses
                                     callback_data=f"admin_direct_msg:{message.from_user.id}")]
     ])
 
+    # 3. Пересылаем медиа или текст каждому админу через MediaRelayService
     sent_count = 0
     for adm_id in admin_ids:
-        try:
-            await bot.send_message(chat_id=adm_id, text=ticket_head, reply_markup=kb_reply, parse_mode="HTML")
+        success = await MediaRelayService.relay_message(
+            bot=bot,
+            message=message,
+            target_chat_id=adm_id,
+            header_text=ticket_head,
+            reply_markup=kb_reply
+        )
+        if success:
             sent_count += 1
-        except Exception:
-            pass
 
-    # 3. Подтверждение пользователю
+    # 4. Подтверждение пользователю
     confirm_msg = await I18nService.tr(
         "✅ <b>Ваше сообщение успешно передано администрации!</b>\n"
         "Мы свяжемся с вами в этом чате при необходимости.",
